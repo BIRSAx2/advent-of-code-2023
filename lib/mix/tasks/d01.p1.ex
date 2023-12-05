@@ -12,7 +12,7 @@ defmodule Mix.Tasks.D01.P1 do
     treb7uchet
     """
 
-    input = AdventOfCode.Input.get!(1)
+    # input = AdventOfCode.Input.get!(1)
 
     if Enum.member?(args, "-b"),
       do: Benchee.run(%{part_1: fn -> input |> part1() end}),
