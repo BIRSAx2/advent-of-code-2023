@@ -1,118 +1,101 @@
 defmodule AdventOfCode.Day05 do
-  defp parse(input) do
-    [seeds | maps] =
-      String.split(input, "\n\n", trim: true)
+  def map_number([], n), do: n
 
-    seeds =
-      parse_seeds(seeds)
-
-    maps =
-      Enum.map(maps, &parse_map/1)
-      |> Map.new()
-
-    %{seeds: seeds, maps: maps}
-  end
-
-  defp parse_seeds(seeds) do
-    seeds
-    |> String.replace("seeds: ", "")
-    |> parse_row()
-  end
-
-  defp parse_map(map) do
-    [name | rows] =
-      String.split(map, "\n", trim: true)
-
-    name =
-      String.replace(name, " map:", "")
-      |> String.replace("-", "_")
-      |> String.replace(" ", "_")
-      |> String.downcase()
-
-    rows =
-      Enum.map(rows, &parse_row/1)
-      |> Enum.map(&to_range/1)
-
-    {String.to_atom(name), rows}
-  end
-
-  defp to_range([d_start, s_start, offset]) do
-    %{
-      destination: d_start..(d_start + offset - 1),
-      source: s_start..(s_start + offset - 1)
-    }
-  end
-
-  defp parse_row(row) do
-    row
-    |> String.split(" ", trim: true)
-    |> Enum.map(&String.to_integer/1)
-  end
-
-  defp translate(seed, mappings) do
-    range =
-      Enum.find(mappings, fn mapping ->
-        seed in mapping.source
-      end)
-
-    if range == nil do
-      seed
+  def map_number([{range, _} = fun | maps], n) do
+    if n in range do
+      apply_fun(fun, n)
     else
-      ss.._ = range.source
-      ds.._ = range.destination
-
-      seed - ss + ds
+      map_number(maps, n)
     end
   end
 
+  def apply_fun({range, dest}, n), do: dest + n - range.first
 
-  defp find_lowest_location(almanac) do
-    almanac.seeds
-    |> Enum.map(fn seed ->
-      seed
-      |> translate(almanac.maps.seed_to_soil)
-      |> translate(almanac.maps.soil_to_fertilizer)
-      |> translate(almanac.maps.fertilizer_to_water)
-      |> translate(almanac.maps.water_to_light)
-      |> translate(almanac.maps.light_to_temperature)
-      |> translate(almanac.maps.temperature_to_humidity)
-      |> translate(almanac.maps.humidity_to_location)
-    end)
-    |> Enum.min()
+  def process(input) do
+    ["seeds: " <> seeds | maps] = input |> String.split("\n\n", trim: true)
+
+    {parse_nums(seeds),
+     maps
+     |> Enum.map(fn map ->
+       [_name, elements] = String.split(map, " map:\n")
+
+       elements
+       |> String.split("\n", trim: true)
+       |> Enum.map(&parse_nums/1)
+       |> Enum.map(&create_mapping/1)
+     end)}
   end
 
-  def part1(args) do
-    args
-    |> parse()
-    |> find_lowest_location()
+  def create_mapping([dest, source, length]) do
+    {source..(source + length - 1), dest}
   end
 
-  defp find_lowest_location_part2(almanac) do
-    almanac.seeds
-    |> Enum.chunk_every(2)
-    |> Enum.map(fn [start, offset] ->
-      start..(start + offset - 1)
-      |> Range.to_list()
-    end)
-    |> IO.inspect()
+  def map_range(range, []), do: [range]
+
+  def map_range(arg_range, [{fun_range, _} = fun_def | maps]) do
+    if Range.disjoint?(fun_range, arg_range) do
+      map_range(arg_range, maps)
+    else
+      fun_lo..fun_hi = fun_range
+      arg_lo..arg_hi = arg_range
+      lo = [fun_lo, arg_lo] |> Enum.max()
+      hi = [fun_hi, arg_hi] |> Enum.min()
+
+      [
+        apply_fun(fun_def, lo)..apply_fun(fun_def, hi)
+        | if(arg_lo < lo, do: map_range(arg_lo..(lo - 1), maps), else: []) ++
+            if(hi < arg_hi, do: map_range((hi + 1)..arg_hi, maps), else: [])
+      ]
+    end
+  end
+
+  def map_ranges(ranges, []), do: normalize_ranges(ranges)
+
+  def map_ranges(ranges, [map | maps]) do
+    ranges
+    |> normalize_ranges()
+    |> Enum.map(fn arg -> map_range(arg, map) end)
     |> List.flatten()
-    |> Enum.map(fn seed ->
-      seed
-      |> translate(almanac.maps.seed_to_soil)
-      |> translate(almanac.maps.soil_to_fertilizer)
-      |> translate(almanac.maps.fertilizer_to_water)
-      |> translate(almanac.maps.water_to_light)
-      |> translate(almanac.maps.light_to_temperature)
-      |> translate(almanac.maps.temperature_to_humidity)
-      |> translate(almanac.maps.humidity_to_location)
-    end)
-    |> Enum.min()
+    |> map_ranges(maps)
   end
 
-  def part2(args) do
-    # What about the reverse approach, check which humidity results in the lowest location, then which temperature result in that humidity, etc.
-    args
-    |> parse()
-    |> find_lowest_location_part2()
+  def normalize_ranges(ranges) do
+    ranges
+    |> Enum.sort()
+    |> merge_ranges()
+  end
+
+  def merge_ranges([]), do: []
+  def merge_ranges([a]), do: [a]
+
+  def merge_ranges([a | [b | ranges]]) do
+    if Range.disjoint?(a, b) do
+      [a | merge_ranges([b | ranges])]
+    else
+      merge_ranges([Enum.min([a.first, b.first])..Enum.max(a.last, b.last) | ranges])
+    end
+  end
+
+  def maps_number(n, maps) do
+    Enum.reduce(maps, n, &map_number/2)
+  end
+
+  def parse_nums(nums),
+    do: nums |> String.split(" ", trim: true) |> Enum.map(&String.to_integer/1)
+
+  def part1(input) do
+    {seeds, maps} = process(input)
+    Enum.map(seeds, &maps_number(&1, maps)) |> Enum.min()
+  end
+
+  def part2(input) do
+    {seeds, maps} = process(input)
+
+    seeds
+    |> Enum.chunk_every(2)
+    |> Enum.map(fn [start, length] -> start..(start + length - 1) end)
+    |> map_ranges(maps)
+    |> hd
+    |> then(& &1.first)
   end
 end

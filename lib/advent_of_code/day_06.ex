@@ -19,7 +19,6 @@ defmodule AdventOfCode.Day06 do
   end
 
   def part1(args) do
-    input =
       parse(args)
       |> Enum.map(&compute_way_to_beat_record/1)
       |> Enum.reduce(1, fn x, acc -> acc * x end)
